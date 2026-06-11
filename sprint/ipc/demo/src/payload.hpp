@@ -17,8 +17,9 @@ struct sprint::ipc::TypeTraits<DemoPayload> : DefaultTypeTraits<DemoPayload> {
 
   static const std::string name() { return "DemoPayload"; }
   static constexpr uint32_t id = 0x57535320u; // "WSS "
-  static constexpr uint32_t default_max_elements = 1;
-  static constexpr uint32_t default_ring_size = 8;
+  static constexpr uint32_t max_elements = 1;
+  static constexpr uint32_t ring_size = 8;
+  static constexpr OverwritePolicy policy = OverwritePolicy::STALL_PER_CONSUMER;
 };
 
 template <typename Backend = sprint::ipc::DefaultBackend>

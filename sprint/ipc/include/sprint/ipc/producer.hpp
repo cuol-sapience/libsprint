@@ -24,18 +24,18 @@ public:
   /**
    * @param shm_name        e.g. "/pcl_lidar0" or "/imu0"
    * @param max_elements    slot capacity; defaults to
-   * Traits::default_max_elements
+   * Traits::max_elements
    * @param ring_size       number of slots; defaults to
-   * Traits::default_ring_size must be power of 2, 2–SPRINT_IPC_MAX_RING_SIZE
+   * Traits::ring_size must be power of 2, 2–SPRINT_IPC_MAX_RING_SIZE
    * @param policy          OVERWRITE_OLDEST or STALL_PER_CONSUMER
    * @param stall_timeout_ns  STALL_PER_CONSUMER timeout before dropping lagged
    * consumers
    */
   explicit IpcProducer(
       const std::string &shm_name,
-      uint32_t max_elements = Traits::default_max_elements,
-      uint32_t ring_size = Traits::default_ring_size,
-      OverwritePolicy policy = OverwritePolicy::STALL_PER_CONSUMER,
+      uint32_t max_elements = Traits::max_elements,
+      uint32_t ring_size = Traits::ring_size,
+      OverwritePolicy policy = Traits::policy,
       uint64_t stall_timeout_ns = 50'000'000ULL)
       : shm_name_(shm_name), max_elements_(max_elements), ring_size_(ring_size),
         policy_(policy), stall_timeout_ns_(stall_timeout_ns) {
