@@ -134,7 +134,7 @@ public:
 
     h->consumers[consumer_id_].wait_mode = WaitMode::ANY_NEW;
 
-    while (h->write_seq <= 1) {
+    while (h->write_seq - 1 <= read_seq_local_) {
       int rc = (timeout_ns == 0)
                    ? (pthread_cond_wait(&h->consumers[consumer_id_].cv,
                                         &h->write_mutex),
@@ -179,8 +179,7 @@ public:
   // Use this when the caller needs to finish accessing slot memory (e.g.
   // a cudaMemcpy D→H) before the producer is allowed to reclaim the slot.
   template <typename F>
-  std::optional<Frame> wait_next_and_consume(F &&fn,
-                                             uint64_t timeout_ns = 0) {
+  std::optional<Frame> wait_next_and_consume(F &&fn, uint64_t timeout_ns = 0) {
     ShmHeader *h = header_;
     pthread_mutex_lock(&h->write_mutex);
 
@@ -207,7 +206,7 @@ public:
 
     h->consumers[consumer_id_].wait_mode = WaitMode::SEQUENTIAL;
     Frame f = make_frame(h, want);
-    fn(f);        // consume slot data before signalling the producer it's free
+    fn(f); // consume slot data before signalling the producer it's free
     advance(h, want);
     pthread_mutex_unlock(&h->write_mutex);
     return f;
@@ -304,8 +303,7 @@ private:
     if (header_->backend_id != Backend::backend_id)
       throw std::runtime_error(
           std::string("backend mismatch: segment_id=") +
-          std::to_string(header_->backend_id) +
-          " consumer=" + Backend::name() +
+          std::to_string(header_->backend_id) + " consumer=" + Backend::name() +
           " (id=" + std::to_string(Backend::backend_id) + ")");
   }
 
@@ -318,9 +316,10 @@ private:
   // ── map ring ──────────────────────────────────────────────────────────
 
   void map_ring() {
-    // Wait until the producer has finished alloc_ring() and written all handles.
-    // The producer does an ATOMIC_RELEASE store of write_seq=1 after alloc_ring();
-    // we pair with an ATOMIC_ACQUIRE load so all handle writes are visible.
+    // Wait until the producer has finished alloc_ring() and written all
+    // handles. The producer does an ATOMIC_RELEASE store of write_seq=1 after
+    // alloc_ring(); we pair with an ATOMIC_ACQUIRE load so all handle writes
+    // are visible.
     while (__atomic_load_n(&header_->write_seq, __ATOMIC_ACQUIRE) == 0)
       usleep(1000); // 1 ms; CUDA context init can take hundreds of ms
 
