@@ -10,7 +10,7 @@
 namespace sprint::ipc {
 
 static constexpr uint32_t IPC_GLOBAL_MAX_CONSUMERS = 64;
-static constexpr uint32_t IPC_GLOBAL_MAX_RING_SIZE = 32;
+static constexpr uint32_t IPC_GLOBAL_MAX_RING_SIZE = 256;
 
 // cudaIpcMemHandle_t is 64 bytes; we reserve a bit more for future backends.
 static constexpr size_t IPC_HANDLE_BYTES = 128;
