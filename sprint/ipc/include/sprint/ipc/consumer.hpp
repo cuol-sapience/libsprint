@@ -75,6 +75,7 @@ public:
     ShmHeader *h = header_;
     pthread_mutex_lock(&h->write_mutex);
 
+    skip_if_lapped(h);
     uint64_t want = read_seq_local_ + 1;
     struct timespec dl{};
     if (timeout_ns > 0)
@@ -94,6 +95,9 @@ public:
         pthread_mutex_unlock(&h->write_mutex);
         return std::nullopt;
       }
+      // producer may have lapped us between signalling and us waking
+      skip_if_lapped(h);
+      want = read_seq_local_ + 1;
     }
 
     h->consumers[consumer_id_].wait_mode = WaitMode::SEQUENTIAL;
@@ -108,6 +112,7 @@ public:
   std::optional<Frame> try_next() {
     ShmHeader *h = header_;
     pthread_mutex_lock(&h->write_mutex);
+    skip_if_lapped(h);
     std::optional<Frame> result;
     uint64_t want = read_seq_local_ + 1;
     if (slot_ready(h, want)) {
@@ -183,6 +188,7 @@ public:
     ShmHeader *h = header_;
     pthread_mutex_lock(&h->write_mutex);
 
+    skip_if_lapped(h);
     uint64_t want = read_seq_local_ + 1;
     struct timespec dl{};
     if (timeout_ns > 0)
@@ -202,6 +208,9 @@ public:
         pthread_mutex_unlock(&h->write_mutex);
         return std::nullopt;
       }
+      // producer may have lapped us between signalling and us waking
+      skip_if_lapped(h);
+      want = read_seq_local_ + 1;
     }
 
     h->consumers[consumer_id_].wait_mode = WaitMode::SEQUENTIAL;
@@ -235,6 +244,29 @@ private:
     uint32_t slot = (uint32_t)(seq % h->ring_size);
     uint64_t written = __atomic_load_n(&h->slots[slot].seq, __ATOMIC_ACQUIRE);
     return written == seq;
+  }
+
+  // ── skip_if_lapped ────────────────────────────────────────────────────
+  //
+  // OVERWRITE_OLDEST never waits for consumers, and STALL_PER_CONSUMER gives
+  // up after stall_timeout_ns (ipc_drop_lagged() advances the shared
+  // read_seq, but not read_seq_local_). Either way the producer can reuse the
+  // slot holding read_seq_local_ + 1, after which slot_ready() for that seq
+  // is false forever and the sequential receives never return a frame again.
+  //
+  // Skip to the oldest frame that is still intact and flag the drop so the
+  // next Frame reports was_dropped. That is write_seq - ring_size + 1: the
+  // slot holding write_seq - ring_size is the producer's next_slot_ptr() and
+  // may already be mid-fill. Matches where ipc_drop_lagged() resumes.
+  //
+  // Caller must hold write_mutex.
+
+  void skip_if_lapped(ShmHeader *h) {
+    if (h->write_seq <= read_seq_local_ + h->ring_size)
+      return;
+    read_seq_local_ = h->write_seq - h->ring_size;
+    h->consumers[consumer_id_].read_seq = read_seq_local_;
+    h->consumers[consumer_id_].flags |= SPRINT_CONSUMER_SLOW_DROPPED;
   }
 
   // ── make_frame ────────────────────────────────────────────────────────
